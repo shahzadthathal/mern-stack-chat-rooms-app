@@ -1,0 +1,8 @@
+.chat-room-page {
+  width: 90vw;
+  margin: 0 auto;
+}
+.chat-box {
+  height: calc(100vh - 300px);
+  overflow-y: scroll;
+}
