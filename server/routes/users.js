@@ -2,11 +2,7 @@ var express = require('express');
 var router = express.Router();
 const { check, validationResult} = require("express-validator");
 const jwt = require("jsonwebtoken");
-//const jwtSecret = 'define-in-constants'
 let constants = require('../config/constants');
-
-//const controllers = require("../controllers");
-
 const Services = require('../services');
 const auth = require("../middleware/auth")
 
@@ -14,7 +10,6 @@ const auth = require("../middleware/auth")
 router.get('/', function(req, res, next) {
   res.send('respond with a resource');
 });
-
 
 /**
  * @method - POST
@@ -27,31 +22,21 @@ router.post(
       check('full_name', "Please Enter a Valid Name").not().isEmpty(),
     ],
     async (req, res) => {
-
         try {
-
             const userId = req.user.id;
             const data = {
                 full_name: req.body.full_name,
             }
-
             Services.UserSrvc.update(userId, data)
             .then((user) => {
-                //console.log(user)
                 res.status(200).json(user);
-
             }).catch((err)=>{
-                console.log(err)
                 res.status(500).json({ error: err });
             })
-
-
         } catch (e) {
           res.status(500).send({ message: "Error in Fetching user" });
         }   
     })
-
-
 
 /**
  * @method - GET
@@ -60,18 +45,13 @@ router.post(
  */
 router.get("/me", auth, async (req, res) => {
     try {
-    	//console.log(req.user.id)
       // request.user is getting fetched from Middleware after token authentication
       Services.UserSrvc.getUser(req.user.id)
 	 	.then((user) => {
-	 		//console.log(user)
 	 		res.status(200).json(user);
-
 	 	}).catch((err)=>{
-	 		console.log(err)
 		 	res.status(500).json({ error: err });
 		})
-
     } catch (e) {
       res.status(500).send({ message: "Error in Fetching user" });
     }
@@ -98,20 +78,12 @@ router.post(
 			  errors: errors.array()
 			});
 		}
-
-
-    	//console.log('routes users.js req received')
-    	//console.log(req.body)
-
     	const data = {
             email: req.body.email,
             password: req.body.password
     	}
     	Services.UserSrvc.login(data)
 	 	.then((user) => {
-	 		//console.log("user created")
-	 		//console.log(user)
-
 	 		const payload = {
                 user: {
                     id: user.id
@@ -130,10 +102,8 @@ router.post(
                     });
                 }
             );
-
 	 	}).catch((err)=>{
-	 		console.log(err)
-		 	res.status(500).json({ error: err });
+	 		res.status(500).json({ error: err });
 		})
 
     }
@@ -145,7 +115,6 @@ router.post(
  */
 router.post("/register", 
     [
-    
     	check('username', "Please Enter a Valid username").not().isEmpty(),
         check('full_name', "Please Enter a Valid Name").not().isEmpty(),
         check("email", "Please enter a valid email").isEmail(),
@@ -153,17 +122,12 @@ router.post("/register",
             min: 6
         })
     ], async (req, res) => {
-
     	const errors = validationResult(req);
         if (!errors.isEmpty()) {
             return res.status(203).json({
                 errors: errors.array()
             });
         }
-
-//    	console.log('routes users.js req received')
- //   	console.log(req.body)
-
     	const data = {
     		username: req.body.username,
     		full_name: req.body.full_name,
@@ -172,9 +136,6 @@ router.post("/register",
     	}
     	Services.UserSrvc.create(data)
 	 	.then((user) => {
-	 		//console.log("user created")
-	 		//console.log(user)
-
 	 		const payload = {
                  user: {
                     id: user.id
@@ -194,7 +155,6 @@ router.post("/register",
             );
 
 	 	}).catch((err)=>{
-	 		console.log(err)
 		 	res.status(203).json({ error: err });
 		})
 });

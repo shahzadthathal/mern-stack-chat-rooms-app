@@ -1,32 +1,42 @@
-#!/usr/bin/env node
 
-/**
- * Module dependencies.
- */
+const cluster  = require('cluster');
+const winston  = require('winston');
 
-var app = require('../app');
-var debug = require('debug')('server:server');
-var http = require('http');
-const models = require("../models");
-var socket = require('../lib/socket');
-let jwt = require('jsonwebtoken');
-let constants = require('../config/constants');
+if (cluster.isMaster) { // Parent, only creates clusters
+    global.processId = 'Master';
+    const numCPUs = require('os').cpus().length;
+    winston.info(`Launching ${numCPUs} worker(s)`);
+    for (let i = 0; i < numCPUs; ++i) {
+        cluster.fork();
+    }
+    cluster.on('fork', worker => winston.info(`Worker ${worker.id} created`));
+    cluster.on('listening', (worker, address) => {
+        winston.info(`Worker ${worker.id} (pid ${worker.process.pid}) is now connected to ${address.address}:${address.port}`);
+    });
+    cluster.on('exit', worker => {
+        winston.warn(`Worker ${worker.id} (pid ${worker.process.pid}) died, forking a new one...`);
+        cluster.fork();
+    });
+}else{
 
+  var app = require('../app');
+  var debug = require('debug')('server:server');
+  var http = require('http');
+  const models = require("../models");
+  var socket = require('../lib/socket');
+  let jwt = require('jsonwebtoken');
+  let constants = require('../config/constants');
 
-/**
- * Get port from environment and store in Express.
- */
+  var port = normalizePort(process.env.PORT || '4000');
+  console.log("Listening on port: "+port)
+  app.set('port', port);
 
-var port = normalizePort(process.env.PORT || '4000');
-console.log("Listening on port: "+port)
-app.set('port', port);
+  global.processId = 'Worker ' + cluster.worker.id;
 
-/**
- * Create HTTP server.
- */
-
-var server = http.createServer(app);
-//socket.init(server);
+  /**
+   * Create HTTP server.
+   */
+  var server = http.createServer(app);
 
   const io = require("socket.io")(server);
 
@@ -34,19 +44,13 @@ var server = http.createServer(app);
   io.use((socket, next) => {
       //Get auth token from query string
       const authToken = socket.handshake.query.authToken;
-      //console.log("socket authToken")
-      //console.log(authToken)
-
       if (!authToken) {
         return false;
       }
       jwt.verify(authToken, constants.JWT_SECRET, (err, decoded) => {
           if (err) {
-            console.log("json webtoken not authorized")
-            console.log(err)
+            return false;
           }else{
-            //console.log("decoded auth token");
-            //console.log(decoded)
             let user = decoded.user;
             let userId = user.id;
             models.UserModel.findOne({_id:userId},['_id','socket_id','username','full_name'], (err,userFound) => {
@@ -63,12 +67,6 @@ var server = http.createServer(app);
 
   // Events
   io.sockets.on('connection', (socket) => {
-  //io.on("connection", socket => {
-    console.log("Socket connect!")
-    console.log("SocketId and user:")
-    console.log(socket.client.id)
-    console.log(socket.user)
-
     let socketId = socket.client.id;
     let userId = socket.user._id;
 
@@ -79,74 +77,38 @@ var server = http.createServer(app);
         if(err) console.log(err)
     });
 
-    // models.UserModel.findByIdAndUpdate(userId,{'socket_id':socketId,'is_online':true},(err,result)=>{
-    //   if(err) console.log(err)
-    //   //console.log(result)
-    // })
-
-
     socket.on("join", async room => {
-      console.log("socket.on('join')")
-      console.log(room)
-
       socket.join(room);
       io.emit("roomJoined", room);
-      console.log("i.emit('roomJoined')")
-      
     });
 
     socket.on("joinroom", async roomId => {
-      console.log("socket.on('joinroom')")
-      console.log(roomId)
       socket.join(roomId);
       io.emit("roomJoined", roomId);
     });
 
     socket.on("message", async data => {
-
-      console.log("socket.on('message")
-      console.log(data)
-
-      //const { chatRoomName, author, message } = data;
       const { roomId, author, message } = data;
-      
-      // const chatRoom = await models.ChatRoom.findAll({
-      //   where: { name: chatRoomName },
-      // });
-      // const chatRoomId = chatRoom[0].id;
-      // const chatMessage = await models.ChatMessage.create({
-      //   chatRoomId,
-      //   author,
-      //   message: message,
-      // });
-      
       let chatMessage = new models.ChatMessage();
       chatMessage.author_id = socket.user.id;
-      //chatMessage.author = author;
       chatMessage.chat_room_id = roomId;
       chatMessage.message = message;
-
       chatMessage.save(function (err) {
         if(!err){
           chatMessage.author = socket.user.username;
           io.emit("newMessage", chatMessage);
         }
         else{
-          console.log("error in saving new message")
           console.log(err)
         }
       });
     });
 
     socket.on('disconnect', (reason) => {
-      console.log("Socket disconnect!")
-      console.log("user")
-      console.log(socket.user)
       socket.user.is_online = false;
       socket.user.updated_at = Date.now();
       socket.user.save((err) => {
         if(err) console.log(err)
-        console.log("user updated")
       });
 
     });
@@ -154,14 +116,15 @@ var server = http.createServer(app);
   });
 
 
-/**
- * Listen on provided port, on all network interfaces.
- */
 
-server.listen(port);
-server.on('error', onError);
-server.on('listening', onListening);
+  /**
+   * Listen on provided port, on all network interfaces.
+   */
 
+  server.listen(port);
+  server.on('error', onError);
+  server.on('listening', onListening);
+}
 /**
  * Normalize a port into a number, string, or false.
  */
